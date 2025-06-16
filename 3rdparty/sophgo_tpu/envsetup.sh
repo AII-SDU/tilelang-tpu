@@ -1,0 +1,12 @@
+#!/bin/bash
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+
+export SOPHGO_TPU_ROOT=$DIR
+export SOPHGO_TPU_RUNTIME_PATH=$SOPHGO_TPU_ROOT/runtime
+export USE_CMODEL=1
+echo "SOPHGO_TPU_ROOT : ${SOPHGO_TPU_ROOT}"
+echo "SOPHGO_TPU_RUNTIME_PATH : ${SOPHGO_TPU_RUNTIME_PATH}"
+
+
+export PATH=${SOPHGO_TPU_RUNTIME_PATH}/sg2380/qemu/bin/:$PATH
+export LD_LIBRARY_PATH=${SOPHGO_TPU_RUNTIME_PATH}/sg2380/TPU1686/cmodel/:$LD_LIBRARY_PATH
