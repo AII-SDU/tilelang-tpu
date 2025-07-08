@@ -51,16 +51,16 @@ def match_declare_kernel_cpu(source: str, annotation: str = "int32_t") -> int:
     raise ValueError("No global kernel found in the source code")
 
 
-def is_cuda_target(target: Target) -> bool:
-    return target.kind.name == "cuda"
+# def is_cuda_target(target: Target) -> bool:
+#     return target.kind.name == "cuda"
 
 
-def is_hip_target(target: Target) -> bool:
-    return target.kind.name == "hip"
+# def is_hip_target(target: Target) -> bool:
+#     return target.kind.name == "hip"
 
 
-def is_cpu_target(target: Target) -> bool:
-    return target.kind.name in ["c"]
+# def is_cpu_target(target: Target) -> bool:
+#     return target.kind.name in ["c"]
 
 
 def get_annotated_mod(

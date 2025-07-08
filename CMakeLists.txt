@@ -49,17 +49,17 @@ if(TILE_LANG_INSTALL_STATIC_LIB)
   set(BUILD_STATIC_RUNTIME ON)
 endif()
 
-# Enforce CUDA standard
-if(USE_CUDA)
-  set(CMAKE_CUDA_STANDARD 17)
-endif()
+# # Enforce CUDA standard
+# if(USE_CUDA)
+#   set(CMAKE_CUDA_STANDARD 17)
+# endif()
 
-# Enforce HIP standard
-if(USE_ROCM)
-  set(CMAKE_HIP_STANDARD 17)
-  check_cxx_compiler_flag("-std=c++17" SUPPORT_CXX17)
-  set(CMAKE_CXX_FLAGS "-D__HIP_PLATFORM_AMD__ ${CMAKE_CXX_FLAGS}")
-endif()
+# # Enforce HIP standard
+# if(USE_ROCM)
+#   set(CMAKE_HIP_STANDARD 17)
+#   check_cxx_compiler_flag("-std=c++17" SUPPORT_CXX17)
+#   set(CMAKE_CXX_FLAGS "-D__HIP_PLATFORM_AMD__ ${CMAKE_CXX_FLAGS}")
+# endif()
 
 # Enforce C++ standard
 set(CMAKE_CXX_STANDARD 17)
@@ -117,24 +117,24 @@ tilelang_file_glob(GLOB TILE_LANG_SRCS
   src/target/rt_mod_ppl.cc
 )
 
-# Include CUDA source files if CUDA is enabled
-if(USE_CUDA)
-  tilelang_file_glob(GLOB TILE_LANG_CUDA_SRCS
-    src/runtime/*.cc
-    src/target/codegen_cuda.cc
-    src/target/rt_mod_cuda.cc
-  )
-  list(APPEND TILE_LANG_SRCS ${TILE_LANG_CUDA_SRCS})
-endif()
+# # Include CUDA source files if CUDA is enabled
+# if(USE_CUDA)
+#   tilelang_file_glob(GLOB TILE_LANG_CUDA_SRCS
+#     src/runtime/*.cc
+#     src/target/codegen_cuda.cc
+#     src/target/rt_mod_cuda.cc
+#   )
+#   list(APPEND TILE_LANG_SRCS ${TILE_LANG_CUDA_SRCS})
+# endif()
 
-# Include ROCm source files if ROCm is enabled
-if(USE_ROCM)
-  tilelang_file_glob(GLOB TILE_LANG_HIP_SRCS
-    src/target/codegen_hip.cc
-    src/target/rt_mod_hip.cc
-  )
-  list(APPEND TILE_LANG_SRCS ${TILE_LANG_HIP_SRCS})
-endif()
+# # Include ROCm source files if ROCm is enabled
+# if(USE_ROCM)
+#   tilelang_file_glob(GLOB TILE_LANG_HIP_SRCS
+#     src/target/codegen_hip.cc
+#     src/target/rt_mod_hip.cc
+#   )
+#   list(APPEND TILE_LANG_SRCS ${TILE_LANG_HIP_SRCS})
+# endif()
 
 message(STATUS "Collected source files: ${TILE_LANG_SRCS}")
 
@@ -151,38 +151,38 @@ set(TILE_LANG_INCLUDES
 )
 
 # Find CUDA Toolkit
-if(USE_CUDA)
-  find_package(CUDAToolkit REQUIRED)
+# if(USE_CUDA)
+#   find_package(CUDAToolkit REQUIRED)
 
-  if(NOT CUDAToolkit_FOUND)
-    message(FATAL_ERROR "CUDA Toolkit not found. Please set CUDAToolkit_ROOT.")
-  endif()
+#   if(NOT CUDAToolkit_FOUND)
+#     message(FATAL_ERROR "CUDA Toolkit not found. Please set CUDAToolkit_ROOT.")
+#   endif()
 
-  message(STATUS "CUDA Toolkit includes: ${CUDAToolkit_INCLUDE_DIRS}")
-  set(CUDA_MAJOR_VERSION ${CUDAToolkit_VERSION_MAJOR})
-  message(STATUS "Setting CUDA_MAJOR_VERSION=${CUDA_MAJOR_VERSION}")
-  add_compile_definitions(CUDA_MAJOR_VERSION=${CUDA_MAJOR_VERSION})
+#   message(STATUS "CUDA Toolkit includes: ${CUDAToolkit_INCLUDE_DIRS}")
+#   set(CUDA_MAJOR_VERSION ${CUDAToolkit_VERSION_MAJOR})
+#   message(STATUS "Setting CUDA_MAJOR_VERSION=${CUDA_MAJOR_VERSION}")
+#   add_compile_definitions(CUDA_MAJOR_VERSION=${CUDA_MAJOR_VERSION})
   
-  list(APPEND TILE_LANG_INCLUDES ${CUDAToolkit_INCLUDE_DIRS})
-endif(USE_CUDA)
+#   list(APPEND TILE_LANG_INCLUDES ${CUDAToolkit_INCLUDE_DIRS})
+# endif(USE_CUDA)
 
-# Find ROCM Toolkit
-if(USE_ROCM)
-  find_rocm(${USE_ROCM})
-  message(STATUS "USE_ROCM: ${USE_ROCM}")
+# # Find ROCM Toolkit
+# if(USE_ROCM)
+#   find_rocm(${USE_ROCM})
+#   message(STATUS "USE_ROCM: ${USE_ROCM}")
 
-  if(ROCM_FOUND)
-    # always set the includedir
-    # avoid global retrigger of cmake
-    include_directories(SYSTEM ${ROCM_INCLUDE_DIRS})
-    add_definitions(-D__HIP_PLATFORM_HCC__=1)
-  else()
-    message(FATAL_ERROR "ROCM Toolkit not found. Please set HIP_ROOT.")
-  endif(ROCM_FOUND)
+#   if(ROCM_FOUND)
+#     # always set the includedir
+#     # avoid global retrigger of cmake
+#     include_directories(SYSTEM ${ROCM_INCLUDE_DIRS})
+#     add_definitions(-D__HIP_PLATFORM_HCC__=1)
+#   else()
+#     message(FATAL_ERROR "ROCM Toolkit not found. Please set HIP_ROOT.")
+#   endif(ROCM_FOUND)
 
-  message(STATUS "ROCM Toolkit includes: ${ROCM_INCLUDE_DIRS}")
-  list(APPEND TILE_LANG_INCLUDES ${ROCM_INCLUDE_DIRS})
-endif(USE_ROCM)
+#   message(STATUS "ROCM Toolkit includes: ${ROCM_INCLUDE_DIRS}")
+#   list(APPEND TILE_LANG_INCLUDES ${ROCM_INCLUDE_DIRS})
+# endif(USE_ROCM)
 
 # Define compile-time macros
 set(TILE_LANG_COMPILE_DEFS
