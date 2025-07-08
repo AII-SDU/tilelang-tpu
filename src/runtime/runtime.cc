@@ -1,21 +1,21 @@
 // Copyright (c) Tile-AI Corporation.
 // Licensed under the MIT License.
 
-/*!
- * \file tl/runtime/runtime.h
- * \brief Runtime functions.
- *
- */
+// /*!
+//  * \file tl/runtime/runtime.h
+//  * \brief Runtime functions.
+//  *
+//  */
 
-#include "runtime.h"
+// #include "runtime.h"
 
-// #include "../target/cuda.h"
-#include <tvm/runtime/registry.h>
+// // #include "../target/cuda.h"
+// #include <tvm/runtime/registry.h>
 
-namespace tvm {
-namespace tl {
+// namespace tvm {
+// namespace tl {
 
-using namespace runtime;
+// using namespace runtime;
 
 // #if (CUDA_MAJOR_VERSION >= 12)
 // template <typename T> static std::string ArrayToStr(const T *ptr, size_t n) {
@@ -205,5 +205,5 @@ using namespace runtime;
 //     });
 // #endif // (CUDA_MAJOR_VERSION >= 12)
 
-} // namespace tl
-} // namespace tvm
+// } // namespace tl
+// } // namespace tvm
