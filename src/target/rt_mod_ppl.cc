@@ -32,8 +32,8 @@ std::string BuildTileLangPPL(IRModule mod) {
   for (auto kv : mod->functions) {
     ICHECK(kv.second->IsInstance<PrimFuncNode>()) << "CodeGenTileLangPPL: Can only take PrimFunc";
     auto f = Downcast<PrimFunc>(kv.second);
-    // auto calling_conv = f->GetAttr<Integer>(tvm::attr::kCallingConv);
-    // ICHECK(calling_conv == CallingConv::kDeviceKernelLaunch);
+    auto calling_conv = f->GetAttr<Integer>(tvm::attr::kCallingConv);
+    ICHECK(calling_conv == CallingConv::kDeviceKernelLaunch);
     cg.AddFunction(f);
   }
 
