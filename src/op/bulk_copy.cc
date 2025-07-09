@@ -22,68 +22,68 @@ namespace tl {
 
 using namespace tir;
 
-static int to_CUtensorMapDataType(DataType dtype) {
-  CUtensorMapDataType tp;
-  if (dtype.is_float()) {
-    switch (dtype.bits()) {
-    case 64:
-      tp = CU_TENSOR_MAP_DATA_TYPE_FLOAT64;
-      break;
-    case 32:
-      tp = CU_TENSOR_MAP_DATA_TYPE_FLOAT32;
-      break;
-    case 16:
-      tp = CU_TENSOR_MAP_DATA_TYPE_FLOAT16;
-      break;
-    case 8:
-      tp = CU_TENSOR_MAP_DATA_TYPE_UINT8;
-      break;
-    default:
-      ICHECK(0) << dtype;
-    }
-  } else if (dtype.is_bfloat16()) {
-    tp = CU_TENSOR_MAP_DATA_TYPE_BFLOAT16;
-  } else if (dtype.is_e4m3_float8() or dtype.is_e5m2_float8()) {
-    tp = CU_TENSOR_MAP_DATA_TYPE_UINT8;
-  } else if (dtype.is_int()) {
-    switch (dtype.bits()) {
-    case 64:
-      tp = CU_TENSOR_MAP_DATA_TYPE_INT64;
-      break;
-    case 32:
-      tp = CU_TENSOR_MAP_DATA_TYPE_INT32;
-      break;
-    case 16:
-      tp = CU_TENSOR_MAP_DATA_TYPE_UINT16;
-      break;
-    case 8:
-      tp = CU_TENSOR_MAP_DATA_TYPE_UINT8;
-      break;
-    default:
-      ICHECK(0) << dtype;
-    }
-  } else if (dtype.is_uint()) {
-    switch (dtype.bits()) {
-    case 64:
-      tp = CU_TENSOR_MAP_DATA_TYPE_UINT64;
-      break;
-    case 32:
-      tp = CU_TENSOR_MAP_DATA_TYPE_UINT32;
-      break;
-    case 16:
-      tp = CU_TENSOR_MAP_DATA_TYPE_UINT16;
-      break;
-    case 8:
-      tp = CU_TENSOR_MAP_DATA_TYPE_UINT8;
-      break;
-    default:
-      ICHECK(0) << dtype;
-    }
-  } else {
-    ICHECK(0) << dtype;
-  }
-  return static_cast<int>(tp);
-}
+// static int to_CUtensorMapDataType(DataType dtype) {
+//   CUtensorMapDataType tp;
+//   if (dtype.is_float()) {
+//     switch (dtype.bits()) {
+//     case 64:
+//       tp = CU_TENSOR_MAP_DATA_TYPE_FLOAT64;
+//       break;
+//     case 32:
+//       tp = CU_TENSOR_MAP_DATA_TYPE_FLOAT32;
+//       break;
+//     case 16:
+//       tp = CU_TENSOR_MAP_DATA_TYPE_FLOAT16;
+//       break;
+//     case 8:
+//       tp = CU_TENSOR_MAP_DATA_TYPE_UINT8;
+//       break;
+//     default:
+//       ICHECK(0) << dtype;
+//     }
+//   } else if (dtype.is_bfloat16()) {
+//     tp = CU_TENSOR_MAP_DATA_TYPE_BFLOAT16;
+//   } else if (dtype.is_e4m3_float8() or dtype.is_e5m2_float8()) {
+//     tp = CU_TENSOR_MAP_DATA_TYPE_UINT8;
+//   } else if (dtype.is_int()) {
+//     switch (dtype.bits()) {
+//     case 64:
+//       tp = CU_TENSOR_MAP_DATA_TYPE_INT64;
+//       break;
+//     case 32:
+//       tp = CU_TENSOR_MAP_DATA_TYPE_INT32;
+//       break;
+//     case 16:
+//       tp = CU_TENSOR_MAP_DATA_TYPE_UINT16;
+//       break;
+//     case 8:
+//       tp = CU_TENSOR_MAP_DATA_TYPE_UINT8;
+//       break;
+//     default:
+//       ICHECK(0) << dtype;
+//     }
+//   } else if (dtype.is_uint()) {
+//     switch (dtype.bits()) {
+//     case 64:
+//       tp = CU_TENSOR_MAP_DATA_TYPE_UINT64;
+//       break;
+//     case 32:
+//       tp = CU_TENSOR_MAP_DATA_TYPE_UINT32;
+//       break;
+//     case 16:
+//       tp = CU_TENSOR_MAP_DATA_TYPE_UINT16;
+//       break;
+//     case 8:
+//       tp = CU_TENSOR_MAP_DATA_TYPE_UINT8;
+//       break;
+//     default:
+//       ICHECK(0) << dtype;
+//     }
+//   } else {
+//     ICHECK(0) << dtype;
+//   }
+//   return static_cast<int>(tp);
+// }
 
 template <typename T> static Array<T> ReverseArray(Array<T> array) {
   return Array<T>{array.rbegin(), array.rend()};
@@ -129,7 +129,7 @@ Stmt Copy::LowerBulkCopy(const LowerArgs &T, arith::Analyzer *analyzer) const {
       << shared_tensor->name << " with different data type "
       << global_tensor->dtype << " and " << shared_tensor->dtype;
 
-  desc.data_type = to_CUtensorMapDataType(global_tensor->dtype);
+  // desc.data_type = to_CUtensorMapDataType(global_tensor->dtype);
 
   // Global Tensor Shape and Stride
   auto global_range = is_load ? src_range : dst_range;
@@ -160,45 +160,45 @@ Stmt Copy::LowerBulkCopy(const LowerArgs &T, arith::Analyzer *analyzer) const {
   desc.smem_stride = Array<PrimExpr>(desc.rank, PrimExpr(1));
 
   // L2 & OOB
-  desc.l2_promotion = static_cast<int>(CU_TENSOR_MAP_L2_PROMOTION_L2_128B);
-  desc.oob_fill = static_cast<int>(CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE);
+  // desc.l2_promotion = static_cast<int>(CU_TENSOR_MAP_L2_PROMOTION_L2_128B);
+  // desc.oob_fill = static_cast<int>(CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE);
 
-  // Detect smem layout
-  desc.interleave = static_cast<int>(CU_TENSOR_MAP_INTERLEAVE_NONE);
-  if (!shared_layout.defined()) {
-    desc.swizzle = static_cast<int>(CU_TENSOR_MAP_SWIZZLE_NONE);
-  } else {
-    ICHECK(shared_layout->InputDim() == 2) << "Cannot detect TMA layout.";
-    auto stride = as_const_int(shared_layout->InputShape()[0]);
-    auto continuous = as_const_int(shared_layout->InputShape()[1]);
-    ICHECK(stride != nullptr && continuous != nullptr);
-    if (StructuralEqual()(shared_layout, makeGemmABLayoutPadded(
-                                             *stride, *continuous,
-                                             shared_tensor->dtype.bits()))) {
-      desc.swizzle = static_cast<int>(CU_TENSOR_MAP_SWIZZLE_NONE);
-    } else if (StructuralEqual()(
-                   shared_layout,
-                   makeHalfBankSwizzleLayout(*stride, *continuous,
-                                             shared_tensor->dtype.bits()))) {
-      desc.swizzle = static_cast<int>(CU_TENSOR_MAP_SWIZZLE_64B);
-    } else if (StructuralEqual()(
-                   shared_layout,
-                   makeFullBankSwizzleLayout(*stride, *continuous,
-                                             shared_tensor->dtype.bits()))) {
-      desc.swizzle = static_cast<int>(CU_TENSOR_MAP_SWIZZLE_128B);
-    } else {
-      ICHECK(0) << "Cannot detect TMA layout.";
-    }
-  }
+  // // Detect smem layout
+  // desc.interleave = static_cast<int>(CU_TENSOR_MAP_INTERLEAVE_NONE);
+  // if (!shared_layout.defined()) {
+  //   desc.swizzle = static_cast<int>(CU_TENSOR_MAP_SWIZZLE_NONE);
+  // } else {
+  //   ICHECK(shared_layout->InputDim() == 2) << "Cannot detect TMA layout.";
+  //   auto stride = as_const_int(shared_layout->InputShape()[0]);
+  //   auto continuous = as_const_int(shared_layout->InputShape()[1]);
+  //   ICHECK(stride != nullptr && continuous != nullptr);
+  //   if (StructuralEqual()(shared_layout, makeGemmABLayoutPadded(
+  //                                            *stride, *continuous,
+  //                                            shared_tensor->dtype.bits()))) {
+  //     desc.swizzle = static_cast<int>(CU_TENSOR_MAP_SWIZZLE_NONE);
+  //   } else if (StructuralEqual()(
+  //                  shared_layout,
+  //                  makeHalfBankSwizzleLayout(*stride, *continuous,
+  //                                            shared_tensor->dtype.bits()))) {
+  //     desc.swizzle = static_cast<int>(CU_TENSOR_MAP_SWIZZLE_64B);
+  //   } else if (StructuralEqual()(
+  //                  shared_layout,
+  //                  makeFullBankSwizzleLayout(*stride, *continuous,
+  //                                            shared_tensor->dtype.bits()))) {
+  //     desc.swizzle = static_cast<int>(CU_TENSOR_MAP_SWIZZLE_128B);
+  //   } else {
+  //     ICHECK(0) << "Cannot detect TMA layout.";
+  //   }
+  // }
 
   auto inner_box_dim = as_const_int(desc.smem_box[0]);
   ICHECK(inner_box_dim != nullptr);
   int instruction_dim = *inner_box_dim;
-  if (desc.swizzle == static_cast<int>(CU_TENSOR_MAP_SWIZZLE_64B)) {
-    instruction_dim = 64 / src->dtype.bytes();
-  } else if (desc.swizzle == static_cast<int>(CU_TENSOR_MAP_SWIZZLE_128B)) {
-    instruction_dim = 128 / src->dtype.bytes();
-  }
+  // if (desc.swizzle == static_cast<int>(CU_TENSOR_MAP_SWIZZLE_64B)) {
+  //   instruction_dim = 64 / src->dtype.bytes();
+  // } else if (desc.swizzle == static_cast<int>(CU_TENSOR_MAP_SWIZZLE_128B)) {
+  //   instruction_dim = 128 / src->dtype.bytes();
+  // }
   ICHECK((*inner_box_dim) % instruction_dim == 0);
   desc.smem_box.Set(0, PrimExpr(instruction_dim));
 
@@ -292,7 +292,7 @@ Stmt Conv2DIm2ColOp::Lower(const LowerArgs &T,
 
   TMAIm2ColDesc desc;
   desc.rank = src->shape.size();
-  desc.data_type = to_CUtensorMapDataType(src->dtype);
+  // desc.data_type = to_CUtensorMapDataType(src->dtype);
   desc.global_addr = src->data;
   desc.global_shape = ReverseArray(src->shape);
   if (!src->strides.empty()) {
@@ -316,28 +316,28 @@ Stmt Conv2DIm2ColOp::Lower(const LowerArgs &T,
   desc.upper_corner = {-padding, -padding};
   desc.smem_box_pixel = Downcast<IntImm>(dst->shape[0])->value;
   desc.smem_box_channel = Downcast<IntImm>(dst->shape[1])->value;
-  desc.l2_promotion = static_cast<int>(CU_TENSOR_MAP_L2_PROMOTION_L2_128B);
-  desc.oob_fill = static_cast<int>(CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE);
-  desc.interleave = static_cast<int>(CU_TENSOR_MAP_INTERLEAVE_NONE);
-  if (!shared_layout.defined()) {
-    desc.swizzle = static_cast<int>(CU_TENSOR_MAP_SWIZZLE_NONE);
-  } else {
-    ICHECK(shared_layout->InputDim() == 2) << "Cannot detect TMA layout.";
-    auto stride = as_const_int(shared_layout->InputShape()[0]);
-    auto continuous = as_const_int(shared_layout->InputShape()[1]);
-    ICHECK(stride != nullptr && continuous != nullptr);
-    if (StructuralEqual()(shared_layout,
-                          makeHalfBankSwizzleLayout(*stride, *continuous,
-                                                    dst->dtype.bits()))) {
-      desc.swizzle = static_cast<int>(CU_TENSOR_MAP_SWIZZLE_64B);
-    } else if (StructuralEqual()(shared_layout, makeFullBankSwizzleLayout(
-                                                    *stride, *continuous,
-                                                    dst->dtype.bits()))) {
-      desc.swizzle = static_cast<int>(CU_TENSOR_MAP_SWIZZLE_128B);
-    } else {
-      ICHECK(0) << "Cannot detect TMA layout.";
-    }
-  }
+  // desc.l2_promotion = static_cast<int>(CU_TENSOR_MAP_L2_PROMOTION_L2_128B);
+  // desc.oob_fill = static_cast<int>(CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE);
+  // desc.interleave = static_cast<int>(CU_TENSOR_MAP_INTERLEAVE_NONE);
+  // if (!shared_layout.defined()) {
+  //   desc.swizzle = static_cast<int>(CU_TENSOR_MAP_SWIZZLE_NONE);
+  // } else {
+  //   ICHECK(shared_layout->InputDim() == 2) << "Cannot detect TMA layout.";
+  //   auto stride = as_const_int(shared_layout->InputShape()[0]);
+  //   auto continuous = as_const_int(shared_layout->InputShape()[1]);
+  //   ICHECK(stride != nullptr && continuous != nullptr);
+  //   if (StructuralEqual()(shared_layout,
+  //                         makeHalfBankSwizzleLayout(*stride, *continuous,
+  //                                                   dst->dtype.bits()))) {
+  //     desc.swizzle = static_cast<int>(CU_TENSOR_MAP_SWIZZLE_64B);
+  //   } else if (StructuralEqual()(shared_layout, makeFullBankSwizzleLayout(
+  //                                                   *stride, *continuous,
+  //                                                   dst->dtype.bits()))) {
+  //     desc.swizzle = static_cast<int>(CU_TENSOR_MAP_SWIZZLE_128B);
+  //   } else {
+  //     ICHECK(0) << "Cannot detect TMA layout.";
+  //   }
+  // }
 
   Call create_desc = Call(DataType::Handle(), CreateTMAIm2ColDescriptorOp(),
                           desc.EncodeCallArgs());

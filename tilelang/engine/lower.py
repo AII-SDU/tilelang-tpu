@@ -10,7 +10,7 @@ from tilelang import tvm as tvm
 from tvm import tir
 from tvm.ir import CallingConv
 from tvm.target import Target
-from tilelang.contrib import hipcc, nvcc
+# from tilelang.contrib import hipcc, nvcc
 from tilelang.engine.param import KernelParam, CompiledArtifact
 from tilelang.utils.target import determine_target
 from tilelang.engine.phase import (
@@ -51,72 +51,72 @@ def get_host_call(is_device_c: bool = False) -> Callable[[tir.PrimFunc], bool]:
     return lambda func: not get_device_call(is_device_c)(func)
 
 
-@tvm.register_func("tilelang_callback_cuda_compile", override=True)
-def tilelang_callback_cuda_compile(code, target):
-    project_root = osp.join(osp.dirname(__file__), "../..")
-    if "TL_TEMPLATE_PATH" in os.environ:
-        tl_template_path = os.environ["TL_TEMPLATE_PATH"]
-    else:
-        tl_template_path = osp.abspath(osp.join(project_root, "src"))
-    # TODO(lei): this indeed should be renamed into
-    # TL_CUTLASS_INCLUDE_PATH in the future
-    if "TL_CUTLASS_PATH" in os.environ:
-        cutlass_path = os.environ["TL_CUTLASS_PATH"]
-    else:
-        cutlass_path = osp.abspath(osp.join(project_root, "3rdparty/cutlass/include"))
-    compute_version = "".join(nvcc.get_target_compute_version(target).split("."))
+# @tvm.register_func("tilelang_callback_cuda_compile", override=True)
+# def tilelang_callback_cuda_compile(code, target):
+#     project_root = osp.join(osp.dirname(__file__), "../..")
+#     if "TL_TEMPLATE_PATH" in os.environ:
+#         tl_template_path = os.environ["TL_TEMPLATE_PATH"]
+#     else:
+#         tl_template_path = osp.abspath(osp.join(project_root, "src"))
+#     # TODO(lei): this indeed should be renamed into
+#     # TL_CUTLASS_INCLUDE_PATH in the future
+#     if "TL_CUTLASS_PATH" in os.environ:
+#         cutlass_path = os.environ["TL_CUTLASS_PATH"]
+#     else:
+#         cutlass_path = osp.abspath(osp.join(project_root, "3rdparty/cutlass/include"))
+#     compute_version = "".join(nvcc.get_target_compute_version(target).split("."))
 
-    # special handle for Hopper
-    if compute_version == "90":
-        arch = ["-arch=sm_90a"]
-        format = "cubin"
-    else:
-        arch = [f"-arch=sm_{compute_version}"]
-        format = "cubin"
+#     # special handle for Hopper
+#     if compute_version == "90":
+#         arch = ["-arch=sm_90a"]
+#         format = "cubin"
+#     else:
+#         arch = [f"-arch=sm_{compute_version}"]
+#         format = "cubin"
 
-    # printing out number of registers
-    debug_option = "--ptxas-options=--verbose,--register-usage-level=10,--warn-on-local-memory-usage"
-    ptx = nvcc.compile_cuda(
-        code,
-        format,
-        arch,
-        options=[
-            "-std=c++17",
-            debug_option,
-            "--use_fast_math",
-            "-I" + tl_template_path,
-            "-I" + cutlass_path,
-        ],
-        verbose=False,
-    )
+#     # printing out number of registers
+#     debug_option = "--ptxas-options=--verbose,--register-usage-level=10,--warn-on-local-memory-usage"
+#     ptx = nvcc.compile_cuda(
+#         code,
+#         format,
+#         arch,
+#         options=[
+#             "-std=c++17",
+#             debug_option,
+#             "--use_fast_math",
+#             "-I" + tl_template_path,
+#             "-I" + cutlass_path,
+#         ],
+#         verbose=False,
+#     )
 
-    return ptx
+#     return ptx
 
 
-@tvm.register_func("tilelang_callback_hip_compile", override=True)
-def tilelang_callback_hip_compile(code, target):
-    project_root = osp.join(osp.dirname(__file__), "../..")
-    tl_template_path = osp.abspath(osp.join(project_root, "src"))
+# @tvm.register_func("tilelang_callback_hip_compile", override=True)
+# def tilelang_callback_hip_compile(code, target):
+#     project_root = osp.join(osp.dirname(__file__), "../..")
+#     tl_template_path = osp.abspath(osp.join(project_root, "src"))
 
-    # TODO(lei): actually this indeed should be renamed into
-    # TL_COMPOSABLE_KERNEL_INCLUDE_PATH in the future
-    if "TL_COMPOSABLE_KERNEL_PATH" in os.environ:
-        ck_path = os.environ["TL_COMPOSABLE_KERNEL_PATH"]
-    else:
-        ck_path = osp.abspath(osp.join(project_root, "3rdparty/composable_kernel/include"))
+#     # TODO(lei): actually this indeed should be renamed into
+#     # TL_COMPOSABLE_KERNEL_INCLUDE_PATH in the future
+#     if "TL_COMPOSABLE_KERNEL_PATH" in os.environ:
+#         ck_path = os.environ["TL_COMPOSABLE_KERNEL_PATH"]
+#     else:
+#         ck_path = osp.abspath(osp.join(project_root, "3rdparty/composable_kernel/include"))
 
-    hsaco = hipcc.compile_hip(
-        code,
-        target_format="hsaco",
-        options=[
-            "-std=c++17",
-            "-I" + tl_template_path,
-            "-I" + ck_path,
-        ],
-        verbose=False,
-    )
+#     hsaco = hipcc.compile_hip(
+#         code,
+#         target_format="hsaco",
+#         options=[
+#             "-std=c++17",
+#             "-I" + tl_template_path,
+#             "-I" + ck_path,
+#         ],
+#         verbose=False,
+#     )
 
-    return hsaco
+#     return hsaco
 
 
 def extrac_params(func: tir.PrimFunc) -> List[KernelParam]:
@@ -155,32 +155,32 @@ def host_codegen(host_mod: tvm.IRModule, target_host: Target) -> tvm.IRModule:
     return host_mod
 
 
-def device_codegen(device_mod: tvm.IRModule, target: Target) -> tvm.IRModule:
-    device_mod = tilelang.transform.LowerDeviceStorageAccessInfo()(device_mod)
-    device_mod = tir.transform.LowerIntrin()(device_mod)
-    device_mod = tir.transform.Simplify()(device_mod)
+# def device_codegen(device_mod: tvm.IRModule, target: Target) -> tvm.IRModule:
+#     device_mod = tilelang.transform.LowerDeviceStorageAccessInfo()(device_mod)
+#     device_mod = tir.transform.LowerIntrin()(device_mod)
+#     device_mod = tir.transform.Simplify()(device_mod)
 
-    if target.kind.name == "cuda":
-        device_mod = tvm._ffi.get_global_func("target.build.tilelang_cuda")(device_mod, target)
-    elif target.kind.name == "hip":
-        device_mod = tvm._ffi.get_global_func("target.build.tilelang_hip")(device_mod, target)
-    else:
-        raise ValueError(f"Target {target.kind.name} is not supported")
+#     if target.kind.name == "cuda":
+#         device_mod = tvm._ffi.get_global_func("target.build.tilelang_cuda")(device_mod, target)
+#     elif target.kind.name == "hip":
+#         device_mod = tvm._ffi.get_global_func("target.build.tilelang_hip")(device_mod, target)
+#     else:
+#         raise ValueError(f"Target {target.kind.name} is not supported")
 
-    return device_mod
+#     return device_mod
 
 
 def device_codegen_without_compile(device_mod: tvm.IRModule, target: Target) -> tvm.IRModule:
     device_mod = tilelang.transform.LowerDeviceStorageAccessInfo()(device_mod)
     device_mod = tir.transform.LowerIntrin()(device_mod)
     device_mod = tir.transform.Simplify()(device_mod)
-    if target.kind.name == "cuda":
-        device_mod = tvm._ffi.get_global_func("target.build.tilelang_cuda_without_compile")(
-            device_mod, target)
-    elif target.kind.name == "hip":
-        device_mod = tvm._ffi.get_global_func("target.build.tilelang_hip_without_compile")(
-            device_mod, target)
-    elif target.kind.name == "c":
+    # if target.kind.name == "cuda":
+    #     device_mod = tvm._ffi.get_global_func("target.build.tilelang_cuda_without_compile")(
+    #         device_mod, target)
+    # elif target.kind.name == "hip":
+    #     device_mod = tvm._ffi.get_global_func("target.build.tilelang_hip_without_compile")(
+    #         device_mod, target)
+    if target.kind.name == "c":
         device_mod = tvm._ffi.get_global_func("target.build.tilelang_cpp")(device_mod, target)
     elif target.kind.name == "llvm":
         device_mod = tvm._ffi.get_global_func("target.build.llvm")(device_mod, target)
