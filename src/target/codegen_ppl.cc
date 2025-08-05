@@ -841,11 +841,16 @@ void CodeGenTileLangPPL::VisitExpr_(const CallNode *op, std::ostream &os) {
           auto strides = buffer_stride[src_buffer->name];
           src_strides = vector2string(strides);
           std::string min_expr;
-          for (int i = 0; i < src_ranges.size(); i++) {
-            auto sr = src_ranges[i];
-            const PrimExpr &e = sr->min;
-            min_expr +=
-                "(" + PrintExpr(e) + ") * " + std::to_string(strides[i]) + "+";
+          // for (int i = 0; i < src_ranges.size(); i++) {
+          //   auto sr = src_ranges[i];
+          //   const PrimExpr &e = sr->min;
+          //   min_expr +=
+          //       "(" + PrintExpr(e) + ") * " + std::to_string(strides[i]) + "+";
+          // }
+          std::vector<int> stride_map = {1, 3};
+          for (int i=0; i < src_ranges.size(); i++){
+              auto sr = src_ranges[i];
+              min_expr += "("+PrintExpr(sr->min) + ") * " + std::to_string(strides[stride_map[i]]) + "+";
           }
           min_expr[min_expr.size() - 1] = ' ';
           min_expr = "(" + min_expr + ")" + " * " + std::to_string(bytes_size);
