@@ -1,37 +1,84 @@
-# Copyright (c) Microsoft Corporation.
+#!/usr/bin/env python3
+# Copyright (c) Tile-AI Corporation.
 # Licensed under the MIT License.
 
+"""TPU JIT 编译API方式 - matmul 示例"""
+
+import torch
+import torch_tpu
 import tilelang
 import tilelang.language as T
 
 
-def matmul(M, N, K, block_M, block_N, block_K, stage, dtype="float16", accum_dtype="float32"):
+@T.prim_func
+def matmul_func(
+        A: T.Tensor((384, 786), "float16"),
+        B: T.Tensor((786, 786), "float16"),
+        C: T.Tensor((384, 786), "float32"),
+):
+    """矩阵乘法内核 - 编译API版本"""
+    with T.Kernel(T.ceildiv(786, 128), T.ceildiv(384, 128), is_cpu=True) as (bx, by):
+        A_shared = T.alloc_shared((128, 128), "float16")
+        B_shared = T.alloc_shared((128, 128), "float16")
+        C_shared = T.alloc_shared((128, 128), "float32")
 
-    @T.prim_func
-    def main(
-            A: T.Tensor((M, K), dtype),
-            B: T.Tensor((K, N), dtype),
-            C: T.Tensor((M, N), accum_dtype),
-    ):
-        with T.Kernel(T.ceildiv(N, block_N), T.ceildiv(M, block_M), is_cpu=True) as (bx, by):
-            A_shared = T.alloc_shared((block_M, block_K), dtype)
-            B_shared = T.alloc_shared((block_K, block_N), dtype)
-            C_shared = T.alloc_shared((block_M, block_N), accum_dtype)
+        T.ppl_fill(C_shared, T.float32(0))
+        for k in T.Pipelined(T.ceildiv(786, 128), num_stages=2):
+            T.ppl_copy(A[by * 128, k * 128], A_shared)
+            T.ppl_copy(B[k * 128, bx * 128], B_shared)
+            T.ppl_gemm(A_shared, B_shared, C_shared)
 
-            T.ppl_fill(C_shared, T.float32(0))
-            for k in T.Pipelined(T.ceildiv(K, block_K), num_stages=stage):
-                T.ppl_copy(A[by * block_M, k * block_K], A_shared)
-                T.ppl_copy(B[k * block_K, bx * block_N], B_shared)
-                T.ppl_gemm(A_shared, B_shared, C_shared)
-
-            T.ppl_copy(C_shared, C[by * block_M, bx * block_N])
-
-    return main
+        T.ppl_copy(C_shared, C[by * 128, bx * 128])
 
 
-# func =  matmul(4096, 8192, 1024, 1024, 512, 128, 2)
-func = matmul(384, 786, 786, 128, 128, 128, 2)
-mod = tilelang.lower(func)
+if __name__ == "__main__":
+    print("=== TPU JIT 编译API方式 - matmul 测试 ===")
+    
+    # 编译内核
+    print("编译内核...")
+    matmul = tilelang.compile(matmul_func, target="tpu", out_idx=[-1])
+    print(f"✅ 编译完成: {type(matmul)}")
+    
+    # 创建输入和输出张量
+    print("创建输入和输出张量...")
+    device = "tpu:0"
+    A = torch.rand((384, 786), device=device, dtype=torch.float16)
+    B = torch.rand((786, 786), device=device, dtype=torch.float16)
+    C = torch.empty((384, 786), device=device, dtype=torch.float32)
+
+    print(f"输入张量设备: A={A.device}, B={B.device}")
+    print(f"输入张量形状: A={A.shape}, B={B.shape}")
+    print(f"输出张量形状: C={C.shape}")
+
+    # 使用编译API版本调用
+    print("执行 TPU JIT 编译API内核...")
+    matmul[(1,)](A, B, C)
+
+    # 验证结果
+    print("验证结果...")
+    expected = torch.mm(A.float(), B.float())
+    max_diff = torch.max(torch.abs(C - expected)).item()
+    mean_diff = torch.mean(torch.abs(C - expected)).item()
+
+    print(f"最大差异: {max_diff:.8f}")
+    print(f"平均差异: {mean_diff:.8f}")
+    print(f"是否接近相同: {torch.allclose(C, expected, rtol=1e-3, atol=1e-3)}")
+
+    # 测试profiler功能
+    print("\n测试profiler功能...")
+    source = matmul.get_kernel_source()
+    print(f"✅ get_kernel_source(): 获取源码 {len(source)} 字符")
+    
+    profiler = matmul.get_profiler()
+    print(f"✅ get_profiler(): {type(profiler)}")
+
+    if max_diff < 1e-2:  # 由于float16精度，放宽容差
+        print("\n🎉 TPU JIT 编译API方式测试成功！")
+        print("✅ 使用: tilelang.compile(func, target='tpu', out_idx=[-1])")
+    else:
+        print(f"\n❌ 测试失败，最大差异: {max_diff}")
+
+    print("\n=== 测试完成 ===")
 
 # for mm in range(64,4097,64):
 #     for nn in range(64, 1025, 64):

@@ -13,11 +13,13 @@ from tvm.tir import PrimFunc
 from tvm.target import Target
 
 from tilelang.jit.adapter import BaseKernelAdapter
+from tilelang.jit.adapter.tpu import TPUKernelAdapter
 from tilelang.jit.kernel import JITKernel
 from tilelang.utils.target import determine_target, AVALIABLE_TARGETS
 from tilelang.cache import cached
 from logging import getLogger
 from .tpujit import tpujit
+import tilelang
 
 logger = getLogger(__name__)
 
@@ -68,9 +70,10 @@ def jit(
     # If the target is specified as a string, ensure it is valid and convert to a TVM Target.
     if isinstance(target, str):
         assert target in AVALIABLE_TARGETS, f"Invalid target: {target}"
-        target = determine_target(target)
-
-    target = Target(target)
+        # Special handling for TPU - don't convert to TVM Target
+        if target != "tpu":
+            target = determine_target(target)
+            target = Target(target)
 
     assert execution_backend in ["dlpack", "ctypes", "cython"], "Invalid execution backend."
 
@@ -90,6 +93,18 @@ def jit(
         """
         if verbose:
             logger.info(f"Compiling TileLang function:\n{tilelang_func}")
+            
+        # Special handling for TPU target
+        if (isinstance(target, str) and target == "tpu") or (hasattr(target, 'kind') and hasattr(target.kind, 'name') and target.kind.name == "tpu"):
+            # Compile using TPU backend
+            compiled_artifact = tilelang.lower(tilelang_func, target="tpu")
+            # Extract function name from tilelang_func
+            fn_name = getattr(tilelang_func, 'attrs', {}).get('global_symbol', None)
+            if fn_name is None:
+                fn_name = getattr(tilelang_func, 'name_hint', "main")
+            # Create TPU adapter directly
+            return TPUKernelAdapter(compiled_artifact, out_idx or [], fn_name=fn_name)
+        
         return compile(
             tilelang_func,
             target=target,
@@ -122,6 +137,39 @@ def compile(
     """
     Compile the given TileLang PrimFunc with TVM and build a JITKernel.
     """
+    # Special handling for TPU target
+    if (isinstance(target, str) and target == "tpu"):
+        # For TPU, create a simple JITKernel-like wrapper
+        compiled_artifact = tilelang.lower(func, target="tpu")
+        # Extract function name
+        fn_name = getattr(func, 'attrs', {}).get('global_symbol', None)
+        if fn_name is None:
+            fn_name = getattr(func, 'name_hint', "main")
+        adapter = TPUKernelAdapter(compiled_artifact, out_idx or [], fn_name=fn_name)
+        
+        class TPUJITKernel:
+            def __init__(self, adapter):
+                self.adapter = adapter
+                
+            def __getitem__(self, grid):
+                """支持grid语法调用"""
+                return self.adapter.__getitem__(grid)
+                
+            def __call__(self, *args):
+                """支持直接调用"""
+                return self.adapter._convert_torch_func()(*args)
+                
+            def get_kernel_source(self) -> str:
+                """获取生成的C内核源码"""
+                return self.adapter.get_kernel_source()
+                
+            def get_profiler(self, tensor_supply_type=None):
+                """获取性能分析器，为TPU设备定制"""
+                # 直接调用adapter的get_profiler方法，该方法已经处理了TPU设备问题
+                return self.adapter.get_profiler(tensor_supply_type)
+        
+        return TPUJITKernel(adapter)
+    
     return cached(
         func=func,
         out_idx=out_idx,
