@@ -416,12 +416,13 @@ public:
     // Step 2: Emit the pipeline prologue, body and epilogue.
     Stmt prologue = EmitImpl(pipeline_loop_->min,
                              pipeline_loop_->min + max_stage_, true, true);
+    PrimExpr real_end = pipeline_loop_->min + pipeline_loop_->extent;
     Stmt body =
         EmitImpl(pipeline_loop_->min + max_stage_,
-                 pipeline_loop_->min + pipeline_loop_->extent, false, false);
+                 real_end + 1, false, false);
     Stmt epilogue = EmitImpl(
-        pipeline_loop_->min + pipeline_loop_->extent,
-        pipeline_loop_->min + pipeline_loop_->extent + max_stage_, true, true);
+        real_end + 1,
+        real_end + 1 + max_stage_, true, true);
 
     SeqStmt stmt = SeqStmt({prologue, body, epilogue});
 
@@ -766,7 +767,7 @@ private:
   Stmt EmitImpl(PrimExpr start, PrimExpr end, bool unroll_loop,
                 bool need_bound_check) {
     PrimExpr new_loop_var;
-    PrimExpr extent = end - start;
+    PrimExpr extent = end - start + 1;
 
     auto make_nop = []() {
       return BlockRealize({}, Bool(true), MakeBlock(Evaluate(0), {}));
