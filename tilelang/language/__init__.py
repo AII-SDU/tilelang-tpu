@@ -72,6 +72,20 @@ from .customize import (
     ppl_embedding,  # noqa: F401
     ppl_rsqrt,  # noqa: F401
     ppl_add_C,  # noqa: F401
+    rvv_gemm,  # noqa: F401
+    rvv_copy,  # noqa: F401
+    rvv_fill,  # noqa: F401
+    rvv_add,  # noqa: F401
+    rvv_div,  # noqa: F401
+    rvv_exp2,  # noqa: F401 # noqa: F401
+    rvv_mul,  # noqa: F401 
+    rvv_mul_C,  # noqa: F401
+    rvv_reduce_max,  # noqa: F401
+    rvv_reduce_sum,  # noqa: F401
+    rvv_subtract,  # noqa: F401
+    rvv_embedding,  # noqa: F401
+    rvv_rsqrt,  # noqa: F401
+    rvv_add_C,  # noqa: F401
 )
 from .builtin import *  # noqa: F401
 

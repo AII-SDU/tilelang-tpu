@@ -13,12 +13,10 @@ from tvm.tir import PrimFunc
 from tvm.target import Target
 
 from tilelang.jit.adapter import BaseKernelAdapter
-from tilelang.jit.adapter.tpu import TPUKernelAdapter
 from tilelang.jit.kernel import JITKernel
 from tilelang.utils.target import determine_target, AVALIABLE_TARGETS
 from tilelang.cache import cached
 from logging import getLogger
-from .tpujit import tpujit
 import tilelang
 
 logger = getLogger(__name__)
@@ -71,7 +69,7 @@ def jit(
     if isinstance(target, str):
         assert target in AVALIABLE_TARGETS, f"Invalid target: {target}"
         # Special handling for TPU - don't convert to TVM Target
-        if target != "tpu":
+        if target not in ["tpu", "rvv"]:
             target = determine_target(target)
             target = Target(target)
 
@@ -103,7 +101,19 @@ def jit(
             if fn_name is None:
                 fn_name = getattr(tilelang_func, 'name_hint', "main")
             # Create TPU adapter directly
+            from tilelang.jit.adapter.tpu import TPUKernelAdapter
             return TPUKernelAdapter(compiled_artifact, out_idx or [], fn_name=fn_name)
+        
+        elif (isinstance(target, str) and target == "rvv") or (hasattr(target, 'kind') and hasattr(target.kind, 'name') and target.kind.name == "rvv"):
+            # 使用 RVV 后端编译
+            compiled_artifact = tilelang.lower(tilelang_func, target="rvv")
+            # 从 tilelang_func 提取函数名
+            fn_name = getattr(tilelang_func, 'attrs', {}).get('global_symbol', None)
+            if fn_name is None:
+                fn_name = getattr(tilelang_func, 'name_hint', "main")
+            # 创建 RVV 适配器
+            from tilelang.jit.adapter.rvv import RVVKernelAdapter
+            return RVVKernelAdapter(compiled_artifact, out_idx or [], fn_name=fn_name)
         
         return compile(
             tilelang_func,
@@ -145,6 +155,7 @@ def compile(
         fn_name = getattr(func, 'attrs', {}).get('global_symbol', None)
         if fn_name is None:
             fn_name = getattr(func, 'name_hint', "main")
+        from tilelang.jit.adapter.tpu import TPUKernelAdapter
         adapter = TPUKernelAdapter(compiled_artifact, out_idx or [], fn_name=fn_name)
         
         class TPUJITKernel:
@@ -169,6 +180,38 @@ def compile(
                 return self.adapter.get_profiler(tensor_supply_type)
         
         return TPUJITKernel(adapter)
+    
+    elif (isinstance(target, str) and target == "rvv"):
+    # 对于 RVV，创建一个简单的类似 JITKernel 的包装器
+        compiled_artifact = tilelang.lower(func, target="rvv")
+        # 提取函数名
+        fn_name = getattr(func, 'attrs', {}).get('global_symbol', None)
+        if fn_name is None:
+            fn_name = getattr(func, 'name_hint', "main")
+        from tilelang.jit.adapter.rvv import RVVKernelAdapter
+        adapter = RVVKernelAdapter(compiled_artifact, out_idx or [], fn_name=fn_name)
+        
+        class RVVJITKernel:
+            def __init__(self, adapter):
+                self.adapter = adapter
+                
+            def __getitem__(self, grid):
+                """支持网格语法调用"""
+                return self.adapter.__getitem__(grid)
+                
+            def __call__(self, *args):
+                """支持直接调用"""
+                return self.adapter._convert_torch_func()(*args)
+                
+            def get_kernel_source(self) -> str:
+                """获取生成的 RVV 内核源码"""
+                return self.adapter.get_kernel_source()
+                
+            def get_profiler(self, tensor_supply_type=None):
+                """获取性能分析器，为 RVV 设备定制"""
+                return self.adapter.get_profiler(tensor_supply_type)
+        
+        return RVVJITKernel(adapter)
     
     return cached(
         func=func,

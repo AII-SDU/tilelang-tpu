@@ -290,3 +290,184 @@ def ppl_embedding_safe(out, param, index, outer_num, inner_num, select_num, inde
         # 这里的const_val是为了避免在调用时传入None，该参数为预留参数，暂未利用。
         const_val = T.float32(0.0)
         T.call_extern("handle", "ppl.embedding", outptr, paramptr, indexptr, params_tmp_ptr, output_tmp_ptr, outer_num, inner_num, select_num, index_num, const_val)
+
+def rvv_gemm(A, B, C, transpose_A=False, transpose_B=False):
+    Aptr = A.access_ptr("r")
+    Bptr = B.access_ptr("r")
+    Cptr = C.access_ptr("rw")
+    M = C.shape[0]
+    N = C.shape[1]
+    K = A.shape[0] if transpose_A else A.shape[1]
+    K_B = B.shape[1] if transpose_B else B.shape[0]
+    assert K == K_B, "gemm K shape check failed"
+    return T.call_extern("handle", "rvv.gemm", Aptr, Bptr, Cptr, transpose_A, transpose_B, M, N, K)
+
+
+def rvv_copy(
+    src,
+    dst,
+):
+
+    def get_extent(data):
+        if isinstance(data, Buffer):
+            return data.shape
+        elif isinstance(data, BufferRegion):
+            return [x.extent for x in data.region]
+        elif isinstance(data, BufferLoad):
+            print(data.indices)
+        else:
+            return None
+
+    print(type(src))
+    src_extent = get_extent(src)
+    dst_extent = get_extent(dst)
+
+    src_extent = list(src_extent) if src_extent else [1] * len(dst_extent)
+    dst_extent = list(dst_extent) if dst_extent else [1] * len(src_extent)
+    extent = max(src_extent, dst_extent)
+
+    def _to_region(data, access_type):
+        if isinstance(data, Buffer):
+            return buffer_to_tile_region(data, access_type)
+        elif isinstance(data, BufferRegion):
+            return buffer_region_to_tile_region(data, access_type)
+        else:
+            return buffer_load_to_tile_region(data, access_type, extent)
+
+    src = _to_region(src, "r")
+    dst = _to_region(dst, "w")
+    print(src)
+    print(dst)
+    return T.call_extern("handle", "rvv.copy", src, dst)
+
+
+def rvv_fill(buffer, value):
+    buffer = buffer.access_ptr("w")
+    return T.call_extern("handle", "rvv.fill", buffer, value)
+
+
+def rvv_subtract(out, inp1, inp2):
+    outptr = out.access_ptr("w")
+    inpptr1 = inp1.access_ptr("r")
+    inpptr2 = inp2.access_ptr("r")
+    return T.call_extern("handle", "rvv.sub", outptr, inpptr1, inpptr2)
+
+
+def rvv_mul_C(out, inp1, value):
+    outptr = out.access_ptr("w")
+    inpptr1 = inp1.access_ptr("r")
+    return T.call_extern("handle", "rvv.mul_C", outptr, inpptr1, value)
+
+
+def rvv_mul(out, inp1, inp2):
+    outptr = out.access_ptr("w")
+    inpptr1 = inp1.access_ptr("r")
+    inpptr2 = inp2.access_ptr("r")
+    return T.call_extern("handle", "rvv.mul", outptr, inpptr1, inpptr2)
+
+
+@T.macro
+def rvv_exp2(out, work0, work1, coeff, table):  # only support FP32
+    buffer = out.access_ptr("rw")
+    work0ptr = work0.access_ptr("rw")
+    work1ptr = work1.access_ptr("rw")
+    coeffptr = coeff.access_ptr("rw")
+    tableptr = table.access_ptr("rw")
+    T.call_extern("handle", "rvv.exp", buffer, work0ptr, work1ptr, coeffptr, tableptr)
+
+
+def rvv_rsqrt(out, inp):
+    inpptr = inp.access_ptr("r")
+    outptr = out.access_ptr("w")
+    return T.call_extern("handle", "rvv.rsqrt", outptr, inpptr)
+
+
+def rvv_add_C(out, inp1, value):
+    outptr = out.access_ptr("w")
+    inpptr1 = inp1.access_ptr("r")
+    return T.call_extern("handle", "rvv.add_C", outptr, inpptr1, value)
+
+
+def rvv_add(out, inp1, inp2):
+    outptr = out.access_ptr("w")
+    inpptr1 = inp1.access_ptr("r")
+    inpptr2 = inp2.access_ptr("r")
+    return T.call_extern("handle", "rvv.add", outptr, inpptr1, inpptr2)
+
+
+def rvv_div(out, inp1, inp2):
+    outptr = out.access_ptr("w")
+    inpptr1 = inp1.access_ptr("r")
+    inpptr2 = inp2.access_ptr("r")
+    return T.call_extern("handle", "rvv.div", outptr, inpptr1, inpptr2)
+
+
+@T.macro
+def rvv_reduce_sum_safe(inp, out, dim):
+    inpptr = inp.access_ptr("rw")
+    outptr = out.access_ptr("rw")
+    with T.block("reduce_sum"):
+        tmp_shape = [inp.shape[0], 32]  # EU数量为32
+        tmp_buffer_sum = T.alloc_shared(tmp_shape, inp.dtype)
+        tmp_ptr = tmp_buffer_sum.access_ptr("rw")
+        eu_num = T.int32(32)
+        channel = T.int32(64)
+        align_w = T.ceildiv(inp.shape[1], eu_num) * eu_num
+        stride = T.ceildiv(inp.shape[0], channel) * align_w
+        # 调用底层reduce_max实现a
+        T.call_extern("handle", "rvv.reduce_sum", inpptr, outptr, tmp_ptr, eu_num, align_w, stride)
+
+
+def rvv_reduce_sum(inp, out, dim):
+    assert dim == 1, "Only dim=1 is supported for reduction"
+    return rvv_reduce_sum_safe(inp, out, dim)
+
+
+@T.macro
+def rvv_reduce_max_safe(inp, out, dim, clear=True):
+    inpptr = inp.access_ptr("rw")
+    outptr = out.access_ptr("rw")
+    if clear:
+        T.call_extern("handle", "rvv.fill", outptr, T.float16(float('-inf')))
+    # 仅支持2D张量和dim=1
+    # assert len(shape) == 2, "Only 2D tensors are supported"
+    # 如果没有提供临时缓冲区，则创建一个
+    # 创建一个临时缓冲区用于中间结果
+    # 注意：这里的32是EU数量，可能需要根据实际情况调整
+    with T.block("reduce_max"):
+        tmp_shape = [inp.shape[0], 32]  # EU数量为32
+        tmp_buffer_max = T.alloc_shared(tmp_shape, inp.dtype)
+        tmp_ptr = tmp_buffer_max.access_ptr("rw")
+        eu_num = T.int32(32)
+        channel = T.int32(64)
+        align_w = T.ceildiv(inp.shape[1], eu_num) * eu_num
+        stride = T.ceildiv(inp.shape[0], channel) * align_w
+        # 调用底层reduce_max实现a
+        T.call_extern("handle", "rvv.reduce_max", inpptr, outptr, tmp_ptr, eu_num, align_w, stride)
+
+
+def rvv_reduce_max(inp, out, dim, clear=True):
+    # 在函数外部进行检查
+    assert dim == 1, "Only dim=1 is supported"
+    # 调用不含断言的宏函数
+    return rvv_reduce_max_safe(inp, out, dim, clear)
+
+
+def rvv_embedding(out, param, index, outer_num, inner_num, select_num, index_num):
+    # 先判断
+    assert outer_num == 1, "Only outer_num=1 is supported for embedding"
+    return rvv_embedding_safe(out, param, index, outer_num, inner_num, select_num, index_num)
+
+@T.macro
+def rvv_embedding_safe(out, param, index, outer_num, inner_num, select_num, index_num):
+    outptr = out.access_ptr("rw")
+    paramptr = param.access_ptr("r")
+    indexptr = index.access_ptr("r")
+    with T.block("embedding"):
+        params_tmp_buffer = T.alloc_shared([inner_num, select_num], param.dtype)
+        params_tmp_ptr = params_tmp_buffer.access_ptr("rw")
+        output_tmp_buffer = T.alloc_shared([inner_num, index_num], out.dtype)
+        output_tmp_ptr = output_tmp_buffer.access_ptr("rw")
+        # 这里的const_val是为了避免在调用时传入None，该参数为预留参数，暂未利用。
+        const_val = T.float32(0.0)
+        T.call_extern("handle", "rvv.embedding", outptr, paramptr, indexptr, params_tmp_ptr, output_tmp_ptr, outer_num, inner_num, select_num, index_num, const_val)

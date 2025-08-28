@@ -136,6 +136,14 @@ if(USE_ROCM)
   list(APPEND TILE_LANG_SRCS ${TILE_LANG_HIP_SRCS})
 endif()
 
+if(USE_RVV)
+  tilelang_file_glob(GLOB TILE_LANG_HIP_SRCS
+    src/target/codegen_rvv.cc
+    src/target/rt_mod_rvv.cc
+  )
+  list(APPEND TILE_LANG_SRCS ${TILE_LANG_HIP_SRCS})
+endif()
+
 message(STATUS "Collected source files: ${TILE_LANG_SRCS}")
 
 # Add TileLang object library

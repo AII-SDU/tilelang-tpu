@@ -188,6 +188,8 @@ def device_codegen_without_compile(device_mod: tvm.IRModule, target: Target) -> 
         device_mod = tvm._ffi.get_global_func("target.build.tilelang_webgpu")(device_mod, target)
     elif target.kind.name == "tpu":
         device_mod = tvm._ffi.get_global_func("target.build.tilelang_ppl")(device_mod, target)
+    elif target.kind.name == "rvv":
+        device_mod = tvm._ffi.get_global_func("target.build.tilelang_rvv")(device_mod, target)
     else:
         raise ValueError(f"Target {target.kind.name} is not supported")
 
@@ -218,19 +220,23 @@ def lower(
     if isinstance(target, str):
         target = determine_target(target)
 
+    # For TPU, use a dummy CPU target for TVM transforms but generate TPU code
+    dummy_target = tvm.target.Target("llvm", tvm.target.Target("llvm"))
+    
+    # Phase 1: Lower and legalize the IR
+    mod = LowerAndLegalize(mod, dummy_target)
+
+    # Phase 2: Optimize the IR for the target  
+    mod = OptimizeForTarget(mod, dummy_target)
+    
     # Special handling for TPU target which doesn't use TVM's target system
+    
     if (isinstance(target, str) and target == "tpu") or (hasattr(target, 'kind') and target.kind.name == "tpu"):
-        # For TPU, use a dummy CPU target for TVM transforms but generate TPU code
-        dummy_target = tvm.target.Target("llvm", tvm.target.Target("llvm"))
-        
-        # Phase 1: Lower and legalize the IR
-        mod = LowerAndLegalize(mod, dummy_target)
-
-        # Phase 2: Optimize the IR for the target  
-        mod = OptimizeForTarget(mod, dummy_target)
-
         # Directly call TPU codegen and return source code
         device_source = tvm._ffi.get_global_func("target.build.tilelang_ppl")(mod)
+        return CompiledArtifact(None, mod, params, device_source)
+    elif (isinstance(target, str) and target == "rvv") or (hasattr(target, 'kind') and target.kind.name == "rvv"):
+        device_source = tvm._ffi.get_global_func("target.build.tilelang_rvv")(mod)
         return CompiledArtifact(None, mod, params, device_source)
 
     target_host = canon_target_host(target, target_host)

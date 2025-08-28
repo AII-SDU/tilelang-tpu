@@ -85,12 +85,6 @@ void CodeGenTileLangRVV::PrintExtraAttrs(const PrimFunc &f, std::ostream &os) {}
     decl_stream << "#include <assert.h>\n";
     decl_stream << "#include <stddef.h>\n";
     decl_stream << "#include <float.h>\n";
-    decl_stream << "typedef struct {\n" << 
-                  "  void* addr;\n" <<
-                  "  size_t size;\n" <<
-                  "  size_t shape[4];\n" <<
-                  "  size_t stride[4];\n" <<
-                  "} Tensor;\n\n";
     return CodeGenC::Finish();
  }
  
@@ -110,7 +104,6 @@ void CodeGenTileLangRVV::VisitStmt_(const tir::ForNode *op) {
    PrintType(op->loop_var.dtype(), stream);
    stream << ' ' << vid << " = " << start << "; " << vid << " < " << extent
          << "; ++" << vid << ") {\n";
-   stream << "is_last_" << vid <<" = (" << vid << " == " << extent << ")\n";
    int for_scope = BeginScope();
    PrintStmt(op->body);
    this->EndScope(for_scope);

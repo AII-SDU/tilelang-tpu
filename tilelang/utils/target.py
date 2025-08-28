@@ -15,6 +15,7 @@ AVALIABLE_TARGETS = {
     "c",  # represent c source backend
     "llvm",
     "tpu",  # represent TPU/PPL backend
+    "rvv",  # represent RISC-V backend
 }
 
 
