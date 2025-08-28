@@ -106,12 +106,15 @@ class RVVKernelAdapter(BaseKernelAdapter):
             
         # 添加必要的头文件
         header_includes = """
-typedef struct {
-    void* addr;
-    size_t size;
-    size_t shape[4];
-    size_t stride[4];
-} Tensor;
+#include <riscv_vector.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+#include <assert.h>
+#include <stddef.h>
+#include <float.h>
 """
         
         # 在代码开头添加头文件

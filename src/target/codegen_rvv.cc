@@ -76,15 +76,12 @@ void CodeGenTileLangRVV::PrintFuncPrefix(
 void CodeGenTileLangRVV::PrintExtraAttrs(const PrimFunc &f, std::ostream &os) {}
  
  std::string CodeGenTileLangRVV::Finish() {
-    decl_stream << "#include <riscv_vector.h>\n";
-    decl_stream << "#include <stdint.h>\n";
-    decl_stream << "#include <stdio.h>\n";
-    decl_stream << "#include <stdlib.h>\n";
-    decl_stream << "#include <string.h>\n";
-    decl_stream << "#include <math.h>\n";
-    decl_stream << "#include <assert.h>\n";
-    decl_stream << "#include <stddef.h>\n";
-    decl_stream << "#include <float.h>\n";
+    decl_stream << "typedef struct {\n";
+    decl_stream << "    void* addr;\n";
+    decl_stream << "    size_t size;\n";
+    decl_stream << "    size_t shape[4];\n";
+    decl_stream << "    size_t stride[4];\n";
+    decl_stream << "} Tensor;\n";
     return CodeGenC::Finish();
  }
  
