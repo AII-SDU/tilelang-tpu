@@ -1248,9 +1248,9 @@ void CodeGenTileLangRVV::VisitExpr_(const CallNode *op, std::ostream &os) {
       if (dtype.is_float()) {
           if (std::isinf(value) || std::isnan(value)) {
               if (value < 0) {
-                  this->stream << "  " << rvv_type << " broadcast_val = " << "static_cast<" << rvv_type << ">(-INFINITY);\n";
+                  this->stream << "  " << rvv_type << " broadcast_val = " << "(" << rvv_type << ")(-INFINITY);\n";
               } else {
-                  this->stream << "  " << rvv_type << " broadcast_val = " << "static_cast<" << rvv_type << ">(INFINITY);\n";
+                  this->stream << "  " << rvv_type << " broadcast_val = " << "(<" << rvv_type << ")(INFINITY);\n";
               }
           } else {
               this->stream << "  " << rvv_type << " broadcast_val = " << value << ";\n";
@@ -1551,7 +1551,7 @@ void CodeGenTileLangRVV::VisitExpr_(const CallNode *op, std::ostream &os) {
       this->stream << "    for (size_t j = 0; j < vl; j++) {\n";
       this->PrintIndent();
       if (dtype_ == DataType::Float(16)) {
-        this->stream << "      temp[j] = static_cast<" << rvv_type << ">(expf(temp[j]));\n";
+        this->stream << "      temp[j] = (" << rvv_type << ")(expf(temp[j]));\n";
       } else {
         this->stream << "      temp[j] = expf(temp[j]);\n";
       }
@@ -1628,7 +1628,7 @@ void CodeGenTileLangRVV::VisitExpr_(const CallNode *op, std::ostream &os) {
       this->stream << "  " << rvv_type << " init_val = ";
       
       if (dtype_.is_float()) {
-        this->stream << "static_cast<" << rvv_type << ">(-INFINITY)";
+        this->stream << "(" << rvv_type << ")(-INFINITY)";
       } else if (dtype_.is_uint()) {
         this->stream << "0";
       } else {
@@ -2465,6 +2465,25 @@ void CodeGenTileLangRVV::AddFunction(const PrimFunc &f) {
    }
    this->PrintIndent();
    this->stream << "}\n\n";
+   this->stream << "int main(){\n";
+   this->PrintIndent();
+   for (size_t i = 0; i < param_len; ++i) {
+      this->stream << "  void* " << params_name[i] << "= malloc(16);\n";
+   }
+   this->stream << "  " << global_name << "(";
+   for (size_t i = 0; i < param_len; ++i) {
+      if (i != 0)
+        this->stream << ", ";
+      this->stream << params_name[i];
+   }
+   this->stream << ");\n";
+   for (size_t i = 0; i < param_len; ++i) {
+      this->stream << "  free(" << params_name[i] << ");\n";
+   }
+   this->PrintIndent();
+   this->stream << "  return 0;\n";
+   this->PrintIndent();
+   this->stream << "}\n";   
  }
  
 } // namespace codegen

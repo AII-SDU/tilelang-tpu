@@ -206,10 +206,6 @@ def compile(
             def get_kernel_source(self) -> str:
                 """获取生成的 RVV 内核源码"""
                 return self.adapter.get_kernel_source()
-                
-            def get_profiler(self, tensor_supply_type=None):
-                """获取性能分析器，为 RVV 设备定制"""
-                return self.adapter.get_profiler(tensor_supply_type)
         
         return RVVJITKernel(adapter)
     

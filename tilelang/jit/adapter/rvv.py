@@ -13,27 +13,99 @@ from .base import BaseKernelAdapter
 from tilelang.engine.param import CompiledArtifact
 
 def c_to_h(src_path: str, h_path: str, arch: str = "rv64gcv") -> bool:
-    """编译 C 源文件为 *.h 可执行文件"""
-    # 获取编译器路径
+    """将C源码转换为规范化的头文件，仅保留源文件中定义的函数声明
+    
+    Args:
+        src_path: 输入的C源文件路径
+        h_path: 输出的头文件路径
+        arch: 目标架构（默认rv64gcv）
+    
+    Returns:
+        bool: 是否转换成功
+    """
+    # 获取编译器路径 - 使用gcc
     compiler_path = shutil.which("gcc")
     if not compiler_path:
         raise RuntimeError("找不到 RISC-V GCC 编译器")
     
-    # 构建编译命令
+    # 获取源文件的绝对路径用于过滤
+    abs_src_path = os.path.abspath(src_path)
+    
+    # 临时文件路径
+    temp_h_path = h_path + ".tmp"
+    
+    # 构建编译命令生成原始头文件
     cc_cmd = [
         compiler_path,
         f"-march={arch}",
         "-aux-info",
-        h_path,
+        temp_h_path,
         src_path,
     ]
-    
     print(f"h文件转换命令: {' '.join(cc_cmd)}")
     try:
-        ret = subprocess.check_call(cc_cmd)
-        return ret == 0
-    except subprocess.CalledProcessError as e:
-        print(f"转换失败: {e}")
+        # 1. 生成原始头文件
+        result = subprocess.run(
+            cc_cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        
+        # 即使有链接错误，只要头文件生成成功就继续
+        if not os.path.exists(temp_h_path):
+            print(f"[错误] 头文件未生成: {result.stderr}")
+            return False
+        
+        # 2. 读取原始内容并过滤
+        filtered_content = []
+        with open(temp_h_path, 'r') as f:
+            for line in f:
+                # 只保留源文件中定义的函数（根据路径匹配）
+                if abs_src_path in line:
+                    filtered_content.append(line)
+        
+        if not filtered_content:
+            print(f"[警告] 未找到源文件中的函数声明: {abs_src_path}")
+            # 仍然创建头文件但内容为空
+        
+        # 3. 生成保护宏名称
+        header_guard = f"TILELANG_{hashlib.md5(os.path.basename(h_path).encode()).hexdigest().upper()}_H"
+        
+        # 4. 写入规范化的头文件
+        with open(h_path, 'w') as f:
+            f.write(f"""#ifndef {header_guard}
+#define {header_guard}
+
+// 基本头文件包含
+#include <riscv_vector.h>  // RVV内置类型
+#include <stddef.h>       // size_t
+
+#ifdef __cplusplus
+extern "C" {{
+#endif
+
+/* 源文件中定义的函数 */
+{"".join(filtered_content)}
+
+#ifdef __cplusplus
+}}
+#endif
+
+#endif // {header_guard}
+""")
+        
+        # 5. 删除临时文件
+        if os.path.exists(temp_h_path):
+            os.unlink(temp_h_path)
+            
+        print(f"成功生成过滤后的头文件: {h_path}")
+        return True
+        
+    except Exception as e:
+        print(f"[错误] 头文件生成异常: {str(e)}")
+        if os.path.exists(temp_h_path):
+            os.unlink(temp_h_path)
         return False
 
 def compile_to_elf(src_path: str, elf_path: str, arch: str = "rv64gcv") -> bool:
@@ -60,28 +132,6 @@ def compile_to_elf(src_path: str, elf_path: str, arch: str = "rv64gcv") -> bool:
     except subprocess.CalledProcessError as e:
         print(f"编译失败: {e}")
         return False
-
-def run_on_simulator(elf_path: str) -> bool:
-    """在 RISC-V 模拟器上运行编译的程序"""
-    # 获取模拟器路径
-    qemu_riscv = shutil.which("qemu-riscv64")
-    if qemu_riscv is None:
-        print("警告：未找到 qemu-riscv64 模拟器")
-        return False
-    
-    # 构建运行命令
-    run_cmd = [qemu_riscv, elf_path]
-    
-    print(f"运行命令: {' '.join(run_cmd)}")
-    try:
-        result = subprocess.run(run_cmd, capture_output=True, text=True)
-        print(f"模拟器输出: {result.stdout}")
-        if result.stderr:
-            print(f"模拟器错误: {result.stderr}")
-        return result.returncode == 0
-    except subprocess.CalledProcessError as e:
-        print(f"模拟器运行失败: {e}")
-        return False
     
 class RVVKernelAdapter(BaseKernelAdapter):
     """
@@ -106,7 +156,7 @@ class RVVKernelAdapter(BaseKernelAdapter):
                 self.result_idx.append(idx)
         self.arch = arch
         self.elf_path = None
-        
+
     def _prepare_executable(self):
         """编译RVV内核到可执行文件"""
         if self.elf_path and os.path.exists(self.elf_path):
@@ -130,8 +180,7 @@ class RVVKernelAdapter(BaseKernelAdapter):
             return self.elf_path
             
         # 添加必要的头文件
-        header_includes = """
-#include <riscv_vector.h>
+        header_includes = """#include <riscv_vector.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -165,37 +214,6 @@ class RVVKernelAdapter(BaseKernelAdapter):
         
         def torch_func(*args):
             elf_path = self._prepare_executable()
-            
-            # 处理参数
-            tensors = []
-            tensors_index = []
-            fp_scalars = []
-            fp_scalars_index = []
-            fixed_scalars = []
-            fixed_scalars_index = []
-            
-            for index, arg in enumerate(args):
-                if isinstance(arg, torch.Tensor):
-                    tensors.append(arg)
-                    tensors_index.append(index)
-                else:
-                    if isinstance(arg, (int, bool)):
-                        fixed_scalars.append(arg)
-                        fixed_scalars_index.append(index)
-                    elif isinstance(arg, float):
-                        fp_scalars.append(arg)
-                        fp_scalars_index.append(index)
-                    else:
-                        raise TypeError(f"不支持的参数类型: {type(arg)}")
-            
-            print(f"执行内核: {self.fn_name}")
-            print(f"ELF 路径: {elf_path}")
-            print(f"张量参数: {[(t.shape, t.dtype, t.device) for t in tensors]}")
-            
-            # 在模拟器中运行
-            if not run_on_simulator(elf_path):
-                print("警告：模拟器运行失败，尝试其他执行方式")
-                # 这里可以添加其他执行方式，如通过RPC连接到真实硬件
 
         return torch_func
     
@@ -203,114 +221,9 @@ class RVVKernelAdapter(BaseKernelAdapter):
         """支持grid语法"""
         def runner(*args):
             elf_path = self._prepare_executable()
-            
-            # 处理参数
-            tensors = []
-            tensors_index = []
-            fp_scalars = []
-            fp_scalars_index = []
-            fixed_scalars = []
-            fixed_scalars_index = []
-            
-            for index, arg in enumerate(args):
-                if isinstance(arg, torch.Tensor):
-                    tensors.append(arg)
-                    tensors_index.append(index)
-                else:
-                    if isinstance(arg, (int, bool)):
-                        fixed_scalars.append(arg)
-                        fixed_scalars_index.append(index)
-                    elif isinstance(arg, float):
-                        fp_scalars.append(arg)
-                        fp_scalars_index.append(index)
-                    else:
-                        raise TypeError(f"不支持的参数类型: {type(arg)}")
-            
-            print(f"执行内核: {self.fn_name}")
-            print(f"ELF 路径: {elf_path}")
-            print(f"张量参数: {[(t.shape, t.dtype, t.device) for t in tensors]}")
-            
-            # 在模拟器中运行
-            if not run_on_simulator(elf_path):
-                print("警告：模拟器运行失败，尝试其他执行方式")
 
         return runner
         
     def get_kernel_source(self) -> str:
         """获取生成的RVV内核源码"""
         return self.compiled_artifact.kernel_source
-        
-    def get_profiler(self, tensor_supply_type=None):
-        """获取性能分析器，为RVV设备定制"""
-        from tilelang.profiler import Profiler
-        from tilelang.engine.param import KernelParam
-        import torch
-        import time
-        
-        # 创建RVV专用的profiler
-        profiler = Profiler(
-            self.params,
-            self.result_idx,
-            tensor_supply_type or "Auto"
-        ).with_default_adapter(self)
-        
-        # 重写supply函数，使其生成适合RVV的张量
-        original_supply = profiler.supply
-        
-        def rvv_supply(param: KernelParam) -> torch.Tensor:
-            # 创建适合RVV的张量
-            dtype: torch.dtype = param.dtype
-            shape = tuple(int(s) for s in param.shape)
-            
-            # 根据tensor_supply_type生成相应的张量
-            if tensor_supply_type in ['Auto', 'Random', 'Integer']:
-                return torch.randn(*shape).to(dtype)
-            elif tensor_supply_type == 'Zero':
-                return torch.zeros(*shape, dtype=dtype)
-            elif tensor_supply_type == 'One':
-                return torch.ones(*shape, dtype=dtype)
-            else:
-                # 默认使用随机张量
-                return torch.randn(*shape).to(dtype)
-            
-        profiler.supply = rvv_supply
-        
-        # 重写do_bench接口，添加RVV特定的性能分析
-        original_do_bench = profiler.do_bench
-        
-        def rvv_do_bench(func=None, warmup=25, rep=100, n_warmup=1, n_repeat=1, input_tensors=None):
-            """RVV特定的性能分析"""
-            print(f"RVV性能分析: 使用模拟器进行基准测试")
-            
-            # 编译内核
-            elf_path = self._prepare_executable()
-            
-            # 使用模拟器进行基准测试
-            start_time = time.time()
-            
-            # 运行多次以获取平均性能
-            for i in range(warmup):
-                run_on_simulator(elf_path)
-            
-            times = []
-            for i in range(rep):
-                iter_start = time.time()
-                run_on_simulator(elf_path)
-                iter_end = time.time()
-                times.append(iter_end - iter_start)
-            
-            end_time = time.time()
-            
-            # 计算统计信息
-            if times:
-                avg_time = sum(times) / len(times)
-                min_time = min(times)
-                max_time = max(times)
-                print(f"平均时间: {avg_time*1000:.2f}ms, 最小时间: {min_time*1000:.2f}ms, 最大时间: {max_time*1000:.2f}ms")
-                return avg_time
-            else:
-                print("无法测量性能")
-                return float('inf')
-        
-        profiler.do_bench = rvv_do_bench
-        return profiler
