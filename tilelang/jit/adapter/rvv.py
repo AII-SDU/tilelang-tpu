@@ -12,6 +12,30 @@ from typing import List, Callable
 from .base import BaseKernelAdapter
 from tilelang.engine.param import CompiledArtifact
 
+def c_to_h(src_path: str, h_path: str, arch: str = "rv64gcv") -> bool:
+    """编译 C 源文件为 *.h 可执行文件"""
+    # 获取编译器路径
+    compiler_path = shutil.which("gcc")
+    if not compiler_path:
+        raise RuntimeError("找不到 RISC-V GCC 编译器")
+    
+    # 构建编译命令
+    cc_cmd = [
+        compiler_path,
+        f"-march={arch}",
+        "-aux-info",
+        h_path,
+        src_path,
+    ]
+    
+    print(f"h文件转换命令: {' '.join(cc_cmd)}")
+    try:
+        ret = subprocess.check_call(cc_cmd)
+        return ret == 0
+    except subprocess.CalledProcessError as e:
+        print(f"转换失败: {e}")
+        return False
+
 def compile_to_elf(src_path: str, elf_path: str, arch: str = "rv64gcv") -> bool:
     """编译 C 源文件为 RISC-V ELF 可执行文件"""
     # 获取编译器路径
@@ -98,7 +122,8 @@ class RVVKernelAdapter(BaseKernelAdapter):
         kernel_fn_name = self.fn_name
         
         c_path = os.path.join(cache_dir, f"{kernel_fn_name}_{hash_val}.c")
-        self.elf_path = os.path.join(cache_dir, f"{kernel_fn_name}_{hash_val}.elf")
+        h_path = os.path.join(cache_dir, f"{kernel_fn_name}_{hash_val}.h")
+        self.elf_path = os.path.join(cache_dir, f"{kernel_fn_name}_{hash_val}")
         
         if os.path.exists(self.elf_path):
             print(f"使用缓存的内核: {self.elf_path}")
@@ -124,7 +149,11 @@ class RVVKernelAdapter(BaseKernelAdapter):
         with open(c_path, "w") as f:
             f.write(c_code)
         print(f"生成的 C 代码已保存到: {c_path}")
-        
+
+        if not c_to_h(c_path, h_path, self.arch):
+            raise RuntimeError(f"转换 {c_path} 为 {h_path} 失败")
+        print(f"转换成功: {h_path}")
+
         if not compile_to_elf(c_path, self.elf_path, self.arch):
             raise RuntimeError(f"编译 {c_path} 失败")
         print(f"编译成功: {self.elf_path}")

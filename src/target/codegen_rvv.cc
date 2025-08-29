@@ -2465,32 +2465,6 @@ void CodeGenTileLangRVV::AddFunction(const PrimFunc &f) {
    }
    this->PrintIndent();
    this->stream << "}\n\n";
-     
-   this->stream << "typedef struct {\n";
-  for (auto &name : params_name) {
-    this->stream << "  " << restrict_keyword_ << " " << name << ";\n";
-   }
-   std::string api_name = "tpu_kernel_api_" + global_name + "_args_t";
-  this->stream << "} " << api_name << ";\n";
-  this->stream << "void " << global_name << "_kernel(const void * args) {\n"
-               << "  " << api_name << " *api = (" << api_name << "*)args;\n"
-               << "  " << global_name << "(";
-   int name_index = 0;
-   int name_len = params_name.size();
-  for (auto &name : params_name) {
-     if (name_index != 0)
-       this->stream << "    ";
-     this->stream << "api->" << name;
- 
-     if (name_index == name_len - 1)
-       this->stream << ");";
-     else
-         this->stream << ",";
-     this->stream << "\n";
-     name_index += 1;
-   }
-  this->stream << "  tpu_poll();\n}\n";
-  this->stream << "TPUKERNEL_FUNC_REGISTER(" << global_name << "_kernel);\n";
  }
  
 } // namespace codegen
